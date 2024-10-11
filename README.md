@@ -1,5 +1,5 @@
 # CGCNet
-This is the official code repository for "CGCNet: Remote Sensing Image Road Extraction with Compact Global Global Context-aware".
+This is the official code repository for "CGCNet: Remote Sensing Image Road Extraction with Compact Global Context-aware".
 
 
 ## 1.Training
