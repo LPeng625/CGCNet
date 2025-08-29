@@ -107,7 +107,7 @@ class CompactGlobalContextawareBlock(nn.Module):
         qk = self.to_qk(x).chunk(2, dim=-1)
         q, k = qk[0].reshape(b, -1, n), qk[1]
 
-        if self.with_d_pos:
+        if self.with_pos_2:
             x_g = (self.conv_g(x_clone) + self.pos_embedding_2).reshape(b, c // 2, -1).permute(0, 2,
                                                                                                      1).contiguous()
         else:
