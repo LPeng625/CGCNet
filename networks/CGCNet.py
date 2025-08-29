@@ -108,8 +108,7 @@ class CompactGlobalContextawareBlock(nn.Module):
         q, k = qk[0].reshape(b, -1, n), qk[1]
 
         if self.with_pos_2:
-            x_g = (self.conv_g(x_clone) + self.pos_embedding_2).reshape(b, c // 2, -1).permute(0, 2,
-                                                                                                     1).contiguous()
+            x_g = (self.conv_g(x_clone) + self.pos_embedding_2).reshape(b, c // 2, -1).permute(0, 2, 1).contiguous()
         else:
             x_g = self.conv_g(x_clone).reshape(b, c // 2, -1).permute(0, 2, 1).contiguous()
 
@@ -135,7 +134,7 @@ class CGCNet(nn.Module):
 
         # resnet
         resnet = models.resnet34(pretrained=False)
-        resnet.load_state_dict(torch.load('resnet34-b627a593.pth'))
+        resnet.load_state_dict(torch.load('network/resnet34-b627a593.pth'))
         self.resnet = resnet
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
@@ -166,8 +165,8 @@ class CGCNet(nn.Module):
         # Dimensionality Increase
         self.increase_conv = nn.Conv2d(32, 256, kernel_size=3, padding=1)
 
-        # input shape = 1024 ——> size(64,64)  / input shape = 512 ——> size(64,64)
-        self.cgcb = CompactGlobalContextawareBlock(in_channels=32, size=(64, 64))
+        # input shape = 1024 ——> size(64,64)  / input shape = 512 ——> size(32,32)
+        self.cgcb = CompactGlobalContextawareBlock(in_channels=32, size=(32, 32))
 
 
     def compact_global_contextaware_block_reduction_increase(self, x1):
