@@ -1,5 +1,5 @@
 """
-Codes of LinkNet based on https://github.com/snakers4/spacenet-three
+Codes of RCFSNet based on https://github.com/CVer-Yang/RCFSNet
 """
 import torch
 import torch.nn as nn
