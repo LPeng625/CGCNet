@@ -1,14 +1,10 @@
-import torch
 import torch.nn as nn
 from torchvision import models
 import torch.nn.functional as F
 
 from functools import partial
+from networks import ffm, edm
 
-
-from networks.module import edm, ffm
-
-import numpy as np
 
 nonlinearity = partial(F.relu, inplace=True)
 
@@ -30,13 +26,13 @@ class DecoderBlock(nn.Module):
         self.relu3 = nonlinearity
 
     def forward(self, x):
-        x = self.conv1(x)  # x torch.Size([2, 512, 32, 32]) -> torch.Size([2, 128, 32, 32])
+        x = self.conv1(x)
         x = self.norm1(x)
         x = self.relu1(x)
-        x = self.deconv2(x)  # x torch.Size([2, 128, 32, 32]) -> torch.Size([2, 128, 64, 64])
+        x = self.deconv2(x)
         x = self.norm2(x)
         x = self.relu2(x)
-        x = self.conv3(x)  # x torch.Size([2, 128, 64, 64]) -> torch.Size([2, 256, 64, 64])
+        x = self.conv3(x)
         x = self.norm3(x)
         x = self.relu3(x)
         return x
@@ -45,15 +41,14 @@ class DecoderBlock(nn.Module):
 class BiReNet34(nn.Module):
     def __init__(self, out_channels=1):
         super(BiReNet34, self).__init__()
-        # TODO 模块消融和训练策略选择
-        self.is_Train = False
+        self.is_Train = True
         self.has_FFM = True
         self.has_EDM = True
         self.has_AuxHead = True
 
         filters = [64, 128, 256, 512]
         resnet = models.resnet34(pretrained=False)
-        # resnet.load_state_dict(torch.load('networks/resnet34.pth'))
+        # resnet.load_state_dict(torch.load('resnet34.pth'))
         self.firstconv = resnet.conv1
         self.firstbn = resnet.bn1
         self.firstrelu = resnet.relu
@@ -83,7 +78,7 @@ class BiReNet34(nn.Module):
                 init_cfg=None)
 
         if self.has_EDM:
-            self.EDM = edm.edm_init('carv4', init_stride=1, is_ori=True, inplane=64)
+            self.EDM = edm.init('carv4', init_stride=1, is_ori=True, inplane=64)
 
         self.decoder4 = DecoderBlock(filters[3], filters[2])
         self.decoder3 = DecoderBlock(filters[2], filters[1])
@@ -97,45 +92,41 @@ class BiReNet34(nn.Module):
         self.finalconv3 = nn.Conv2d(32, out_channels, 3, padding=1)
 
     def forward(self, x):
-        # EDM h w 3 -> h/2 w/2 64
+        # EDM
         if self.has_EDM:
-            edge = self.EDM(x)  # edge torch.Size([2, 64, 512, 512])
+            edge = self.EDM(x)
 
-        # Init h w 3 -> h/2 w/2 64
-        x = self.firstconv(x)  # x torch.Size([2, 3, 1024, 1024])->torch.Size([2, 64, 512, 512])
+        x = self.firstconv(x)
         x = self.firstbn(x)
         x = self.firstrelu(x)
 
         # Encoder
-        # h/2 w/2 64 -> h/32 w/32 512
-        e1 = self.firstmaxpool(x)  # x torch.Size([2, 64, 256, 256]) e1 torch.Size([2, 64, 256, 256])
-        e1 = self.encoder1(e1)  # e1 torch.Size([2, 64, 256, 256]) -> torch.Size([2, 64, 256, 256])
-        e2 = self.encoder2(e1)  # e1 torch.Size([2, 64, 256, 256]) -> e2 torch.Size([2, 128, 128, 128])
-        e3 = self.encoder3(e2)  # e2 torch.Size([2, 128, 128, 128]) -> e3 torch.Size([2, 256, 64, 64])
-        e4 = self.encoder4(e3)  # e3 torch.Size([2, 256, 64, 64]) -> e4 torch.Size([2, 512, 32, 32])
+        e1 = self.firstmaxpool(x)
+        e1 = self.encoder1(e1)
+        e2 = self.encoder2(e1)
+        e3 = self.encoder3(e2)
+        e4 = self.encoder4(e3)
 
         # Decoder
         if self.has_FFM:
-            d4 = self.stdc.FeatureFusionModule3(self.decoder4(e4), e3)  # d4 torch.Size([2, 256, 64, 64])
-            d3 = self.stdc.FeatureFusionModule2(self.decoder3(d4), e2)  # d3 torch.Size([2, 128, 128, 128])
-            d2 = self.stdc.FeatureFusionModule1(self.decoder2(d3), e1)  # d2 torch.Size([2, 64, 256, 256])
+            d4 = self.stdc.FeatureFusionModule3(self.decoder4(e4), e3)
+            d3 = self.stdc.FeatureFusionModule2(self.decoder3(d4), e2)
+            d2 = self.stdc.FeatureFusionModule1(self.decoder2(d3), e1)
         else:
             d4 = self.decoder4(e4) + e3
             d3 = self.decoder3(d4) + e2
             d2 = self.decoder2(d3) + e1
 
-        # 将EDM融合到主分支
         if self.has_EDM:
-            d1 = self.decoder1(d2) + edge  # d1 torch.Size([2, 64, 512, 512])
+            d1 = self.decoder1(d2) + edge
         else:
             d1 = self.decoder1(d2)
 
         out = self.finalconv3(self.finalrelu2(self.finalconv2(self.finalrelu1(self.finaldeconv1(
-            d1)))))  # self.finaldeconv1(d1) torch.Size([2, 32, 1024, 1024]) out torch.Size([2, 1, 1024, 1024])
+            d1)))))
         out = F.sigmoid(out)
 
         if self.is_Train:
-            # TODO 采用增强训练策略，即给EDM分支添加辅助训练头
             if self.has_EDM and self.has_AuxHead:
                 out_e = self.finalconv3(self.finalrelu2(self.finalconv2(self.finalrelu1(self.finaldeconv1(edge)))))
                 out_e = F.sigmoid(out_e)
