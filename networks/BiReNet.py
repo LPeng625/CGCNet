@@ -1,6 +1,3 @@
-"""
-Codes of RCFSNet based on https://github.com/CVer-Yang/RCFSNet
-"""
 import torch
 import torch.nn as nn
 from torchvision import models
